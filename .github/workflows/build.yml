@@ -1,0 +1,145 @@
+name: Build Orpheus APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install packages
+        run: npm install
+      - name: Add the MP3 encoder to the app
+        run: cp node_modules/lamejs/lame.min.js www/lame.min.js
+      - name: Create the Android project
+        run: npx cap add android
+      - name: Turn off cloud backup
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:allowBackup="true"/android:allowBackup="false"/' "$M"
+      - name: Add background music playback
+        run: |
+          D=android/app/src/main/java/com/afsin/orpheus
+          mkdir -p "$D"
+          cat > "$D/MusicService.java" <<'JAVA'
+          package com.afsin.orpheus;
+
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.app.Service;
+          import android.content.Intent;
+          import android.content.pm.ServiceInfo;
+          import android.os.Build;
+          import android.os.IBinder;
+
+          public class MusicService extends Service {
+            static final String CH = "orpheus_playback";
+
+            @Override public IBinder onBind(Intent intent) { return null; }
+
+            @Override public int onStartCommand(Intent intent, int flags, int startId) {
+              String title = (intent != null && intent.getStringExtra("title") != null) ? intent.getStringExtra("title") : "Orpheus";
+              String text = (intent != null && intent.getStringExtra("text") != null) ? intent.getStringExtra("text") : "Playing";
+              NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+              if (Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(new NotificationChannel(CH, "Playback", NotificationManager.IMPORTANCE_LOW));
+              }
+              Intent open = new Intent(this, MainActivity.class);
+              open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+              PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+              Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CH) : new Notification.Builder(this);
+              Notification n = b.setContentTitle(title).setContentText(text).setSmallIcon(android.R.drawable.ic_media_play).setContentIntent(pi).setOngoing(true).build();
+              if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+              } else {
+                startForeground(1, n);
+              }
+              return START_STICKY;
+            }
+
+            @Override public void onDestroy() {
+              stopForeground(true);
+              super.onDestroy();
+            }
+          }
+          JAVA
+          cat > "$D/MusicPlugin.java" <<'JAVA'
+          package com.afsin.orpheus;
+
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+
+          @CapacitorPlugin(name = "Music")
+          public class MusicPlugin extends Plugin {
+            @PluginMethod
+            public void start(PluginCall call) {
+              if (Build.VERSION.SDK_INT >= 33 && getActivity().checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                getActivity().requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1);
+              }
+              Intent i = new Intent(getContext(), MusicService.class);
+              i.putExtra("title", call.getString("title", "Orpheus"));
+              i.putExtra("text", call.getString("text", "Playing"));
+              if (Build.VERSION.SDK_INT >= 26) {
+                getContext().startForegroundService(i);
+              } else {
+                getContext().startService(i);
+              }
+              call.resolve();
+            }
+
+            @PluginMethod
+            public void stop(PluginCall call) {
+              getContext().stopService(new Intent(getContext(), MusicService.class));
+              call.resolve();
+            }
+          }
+          JAVA
+          cat > "$D/MainActivity.java" <<'JAVA'
+          package com.afsin.orpheus;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              registerPlugin(MusicPlugin.class);
+              super.onCreate(savedInstanceState);
+            }
+
+            @Override
+            public void onPause() {
+              super.onPause();
+              try { getBridge().getWebView().resumeTimers(); } catch (Exception e) { }
+            }
+          }
+          JAVA
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <application#' "$M"
+          sed -i 's#</application>#    <service android:name=".MusicService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n    </application>#' "$M"
+          cat "$M"
+      - name: Copy app files
+        run: npx cap sync android
+      - name: Build the APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orpheus-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
