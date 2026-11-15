@@ -1,0 +1,10 @@
+{
+  "appId": "com.afsin.orpheus",
+  "appName": "Orpheus",
+  "webDir": "www",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
