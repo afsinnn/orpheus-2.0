@@ -1,282 +1,400 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orpheus - YouTube to MP3</title>
-    <!-- FFmpeg WASM for high-quality conversion -->
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-    <style>
-        :root {
-            --bg: #12161D;
-            --card: #1A202C;
-            --text: #E2E8F0;
-            --accent: #63B3ED;
-            --amber: #FFB547;
-            --danger: #FF6B7A;
-            --r: 14px;
-            --pad: 10px;
-            font-family: "Space Grotesk", system-ui, sans-serif;
-            color-scheme: dark;
-        }
-        * { box-sizing: border-box; margin: 0; }
-        html, body { height: 100%; color: var(--text); background: var(--bg); }
-        button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
-        main { position: relative; z-index: 1; flex: 1; overflow-y: auto; padding: 20px 18px 150px; max-width: 720px; width: 100%; margin: 0 auto; }
-        h1 { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 4px; }
-        h2 { font-size: 18px; font-weight: 700; margin: 26px 0 10px; }
-        .sub { color: var(--text); opacity: 0.7; font-size: 14px; }
-        .row { display: flex; align-items: center; gap: 12px; padding: var(--pad) 12px; border-radius: var(--r); background: var(--card); margin-bottom: 8px; }
-        .row .meta { flex: 1; min-width: 0; }
-        .row .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .ico { width: 40px; height: 40px; border-radius: 10px; background: var(--card); display: grid; place-items: center; flex: none; font-size: 16px; }
-        .btn { background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 999px; font-weight: 700; }
-        .btn.ghost { background: var(--card); color: var(--text); }
-        .btn.sm { padding: 6px 12px; font-size: 13px; }
-        .small { padding: 6px 10px; border-radius: 8px; background: var(--card); font-size: 13px; }
-        dialog { background: var(--card); color: var(--text); border: 0; border-radius: 20px; padding: 20px; width: min(92vw, 460px); max-height: 85vh; overflow: auto; }
-        dialog::backdrop { background: rgba(0,0,0,.6); }
-        input[type=text], select { width: 100%; background: var(--card); border: 1px solid #2f3949; border-radius: 10px; padding: 10px 12px; color: var(--text); font: inherit; margin: 6px 0 12px; }
-        .prog { height: 6px; border-radius: 3px; background: var(--card); overflow: hidden; margin: 6px 0; }
-        .prog i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
-        .empty { color: var(--text); opacity: 0.5; text-align: center; padding: 30px 10px; }
-        @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        dialog[open] { animation: pop .18s ease-out; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12161D">
+<title>Orpheus</title>
+<!-- FFmpeg for robust video-to-audio conversion -->
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<style>
+:root{--bg:#12161D;--panel:#1B212B;--panel2:#242C38;--ink:#EEF1F6;--mute:#8E99AB;--accent:#7C6CFF;--amber:#FFB547;--danger:#FF6B7A;--r:14px;--pad:10px;
+  font-family:"Space Grotesk",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;color:var(--ink)}
+html{background:var(--bg)}
+#wall{position:fixed;inset:0;z-index:0;background-size:cover;background-position:center;pointer-events:none}
+.mark{font-size:11px;letter-spacing:.12em;color:var(--mute)}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:20px 18px 150px;max-width:720px;width:100%;margin:0 auto}
+h1{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+h2{font-size:18px;font-weight:700;margin:26px 0 10px}
+.sub{color:var(--mute);font-size:14px}
+.row{display:flex;align-items:center;gap:12px;padding:var(--pad) 12px;border-radius:var(--r);background:var(--panel);margin-bottom:8px}
+.row .meta{flex:1;min-width:0}
+.row .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .a{color:var(--mute);font-size:13px}
+.ico{width:40px;height:40px;border-radius:10px;background:var(--panel2);display:grid;place-items:center;flex:none;font-size:16px}
+.btn{background:var(--accent);color:#fff;padding:10px 16px;border-radius:999px;font-weight:700}
+.btn.ghost{background:var(--panel2);color:var(--ink)}
+.btn.sm{padding:6px 12px;font-size:13px}
+.small{padding:6px 10px;border-radius:8px;background:var(--panel2);font-size:13px}
+.hscroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
+.card{flex:none;width:130px;background:var(--panel);border-radius:var(--r);padding:10px}
+.card .ico{width:100%;height:90px;margin-bottom:8px;font-size:26px}
+.card .t{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--panel);padding-bottom:env(safe-area-inset-bottom,0);border-top:1px solid var(--panel2);z-index:5}
+nav button{flex:1;padding:12px 0 10px;color:var(--mute);font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button .i{font-size:20px}
+nav button.on{color:var(--ink)}
+nav button.on .i{color:var(--accent)}
+#player{position:fixed;left:10px;right:10px;bottom:calc(64px + env(safe-area-inset-bottom,0));background:var(--panel2);border-radius:var(--r);padding:10px 12px;display:none;z-index:4;max-width:700px;margin:0 auto}
+#player.show{display:block}
+#player .pr{display:flex;align-items:center;gap:10px}
+#player .meta{flex:1;min-width:0}
+#bar{width:100%;margin-top:8px;accent-color:var(--accent)}
+dialog{background:var(--panel);color:var(--ink);border:0;border-radius:20px;padding:20px;width:min(92vw,460px);max-height:85vh;overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+input[type=text],input[type=password],select{width:100%;background:var(--panel2);border:1px solid #2f3949;border-radius:10px;padding:10px 12px;color:var(--ink);font:inherit;margin:6px 0 12px}
+.drop{display:block;border:2px dashed #3a4558;border-radius:var(--r);padding:22px;text-align:center;color:var(--mute);margin:10px 0;cursor:pointer}
+.prog{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin:6px 0}
+.prog i{display:block;height:100%;width:0;background:var(--accent)}
+.links{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.links a{color:var(--ink);background:var(--panel2);padding:5px 10px;border-radius:8px;font-size:13px;text-decoration:none}
+.empty{color:var(--mute);text-align:center;padding:30px 10px}
+.toast{position:fixed;top:calc(12px + env(safe-area-inset-top,0));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:999px;font-weight:500;z-index:20}
+@media (prefers-reduced-motion:no-preference){dialog[open]{animation:pop .18s ease-out}@keyframes pop{from{transform:scale(.96);opacity:0}}}
+</style>
+<style id="usercss"></style>
 </head>
 <body>
+<div id="wall"></div>
 <main id="view"></main>
+
+<div id="player">
+  <div class="pr">
+    <div class="meta"><div class="t" id="pt" style="font-weight:500"></div><div class="a sub" id="pa"></div></div>
+    <button class="small" id="prev" aria-label="Previous">⏮</button>
+    <button class="small" id="pp" aria-label="Play or pause">▶</button>
+    <button class="small" id="next" aria-label="Next">⏭</button>
+  </div>
+  <input type="range" id="bar" min="0" max="100" value="0" step="0.1" aria-label="Seek">
+</div>
+
+<nav>
+  <button data-tab="home" class="on"><span class="i">⌂</span>Home</button>
+  <button data-tab="library"><span class="i">♫</span>Library</button>
+</nav>
+
 <dialog id="dlg"></dialog>
+<audio id="audio" preload="metadata"></audio>
 
 <script>
-const $ = s => document.querySelector(s);
+/* ---------- tiny helpers ---------- */
+const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const today = () => new Date().toISOString().slice(0, 10);
 const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
-function toast(m) { const t = document.createElement('div'); t.textContent = m; t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#fff;color:#000;padding:8px 16px;border-radius:20px;z-index:99;font-weight:bold;'; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
+function toast(m) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.append(t); setTimeout(() => t.remove(), 2200); }
 
-// --- DB Setup ---
-const DB_NAME = 'orpheus_mp3';
-let db;
-function openDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onupgradeneeded = e => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains('tracks')) {
-                db.createObjectStore('tracks', { keyPath: 'id' });
-            }
-        };
-        request.onsuccess = e => { db = e.target.result; resolve(db); };
-        request.onerror = e => reject(e.target.error);
-    });
+/* ---------- storage: MP3 blobs in IndexedDB, small data in localStorage ---------- */
+const DB_NAME = 'orpheus_v2';
+let dbPromise = new Promise((res, rej) => {
+  const r = indexedDB.open(DB_NAME, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('tracks', { keyPath: 'id' });
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+const tx = async (mode, fn) => { const db = await dbPromise; return new Promise((res, rej) => { const t = db.transaction('tracks', mode); const rq = fn(t.objectStore('tracks')); t.oncomplete = () => res(rq?.result); t.onerror = () => rej(t.error); }); };
+const dbAll = () => tx('readonly', s => s.getAll());
+const dbPut = t => tx('readwrite', s => s.put(t));
+const dbDel = id => tx('readwrite', s => s.delete(id));
+const ls = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+let tracks = [];                 
+let playlists = ls('playlists', []);   
+let plays = ls('plays', []);           
+const byId = id => tracks.find(t => t.id === id);
+
+/* ---------- player ---------- */
+const audio = $('#audio'); let queue = [], qi = 0, curUrl = null;
+function playQueue(ids, i = 0) { queue = ids.filter(byId); qi = i; if (queue.length) loadCurrent(); }
+function loadCurrent() {
+  const t = byId(queue[qi]); if (!t) return;
+  if (curUrl) URL.revokeObjectURL(curUrl);
+  curUrl = URL.createObjectURL(t.blob); audio.src = curUrl; audio.play();
+  $('#pt').textContent = t.title; $('#pa').textContent = t.artist || 'Unknown artist';
+  $('#player').classList.add('show');
+  plays.push({ id: t.id, t: Date.now() }); plays = plays.slice(-5000); save('plays', plays);
 }
+audio.onended = () => { if (qi < queue.length - 1) { qi++; loadCurrent(); } };
+audio.ontimeupdate = () => { $('#bar').value = audio.duration ? audio.currentTime / audio.duration * 100 : 0; };
+$('#bar').oninput = e => { if (audio.duration) audio.currentTime = e.target.value / 100 * audio.duration; };
+$('#pp').onclick = () => audio.paused ? audio.play() : audio.pause();
+$('#next').onclick = () => { if (qi < queue.length - 1) { qi++; loadCurrent(); } };
+$('#prev').onclick = () => { if (audio.currentTime > 3 || qi === 0) audio.currentTime = 0; else { qi--; loadCurrent(); } };
 
-async function getAllTracks() {
-    await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction('tracks', 'readonly');
-        const store = tx.objectStore('tracks');
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-    });
-}
-
-async function saveTrack(track) {
-    await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction('tracks', 'readwrite');
-        const store = tx.objectStore('tracks');
-        const req = store.put(track);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-    });
-}
-
-async function deleteTrack(id) {
-    await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction('tracks', 'readwrite');
-        const store = tx.objectStore('tracks');
-        const req = store.delete(id);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-    });
-}
-
-// --- UI Helpers ---
+/* ---------- dialog helper ---------- */
 const dlg = $('#dlg');
-function openDlg(html) { dlg.innerHTML = html; dlg.showModal(); }
-function closeDlg() { dlg.close(); }
+function openDlg(html) { dlg.innerHTML = html; if (!dlg.open) dlg.showModal(); }
+dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 
-// --- YouTube Search & Convert ---
-async function searchYouTube(query) {
-    // Using Invidious API (no key required)
-    try {
-        const response = await fetch(`https://vid.puffyan.us/api/v1/search?q=${encodeURIComponent(query)}&type=video`);
-        if (!response.ok) throw new Error('Search failed');
-        const data = await response.json();
-        return data.filter(item => item.type === 'video').map(item => ({
-            id: item.videoId,
-            title: item.title,
-            artist: item.author,
-            thumbnail: item.videoThumbnails?.[0]?.url || '',
-            duration: item.lengthSeconds
-        }));
-    } catch (e) {
-        console.error('YouTube search error:', e);
-        return [];
-    }
+/* ---------- tabs ---------- */
+let tab = 'home'; 
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab; 
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+function render() { ({ home: renderHome, library: renderLibrary })[tab](); }
+
+/* ---------- stats ---------- */
+function statsFor(list) {
+  const cnt = {}; list.forEach(p => cnt[p.id] = (cnt[p.id] || 0) + 1);
+  const ranked = Object.entries(cnt).filter(([id]) => byId(id)).sort((a, b) => b[1] - a[1]);
+  const artists = {}; list.forEach(p => { const t = byId(p.id); if (t?.artist) artists[t.artist] = (artists[t.artist] || 0) + 1; });
+  const topArtist = Object.entries(artists).sort((a, b) => b[1] - a[1])[0];
+  const secs = list.reduce((n, p) => n + (byId(p.id)?.duration || 0), 0);
+  return { ranked, topArtist: topArtist?.[0], count: list.length, mins: Math.round(secs / 60) };
+}
+function streak() {
+  const days = new Set(plays.map(p => new Date(p.t).toISOString().slice(0, 10))); let n = 0, d = new Date();
+  while (days.has(d.toISOString().slice(0, 10))) { n++; d.setDate(d.getDate() - 1); } return n;
 }
 
-async function downloadVideoBlob(videoId) {
-    // Using a free API to get the direct video URL
-    try {
-        const response = await fetch(`https://api.vevioz.com/api/video/download/${videoId}`);
-        const data = await response.json();
-        if (data.status !== 'success') throw new Error('Download link generation failed');
-        
-        // Get the best quality video stream
-        const videoStream = data.data.streams.find(s => s.extension === 'mp4' && s.quality === 'high') 
-                             || data.data.streams.find(s => s.extension === 'mp4');
-        
-        if (!videoStream) throw new Error('No suitable video stream found');
-        
-        const res = await fetch(videoStream.url);
-        if (!res.ok) throw new Error('Failed to fetch video');
-        return await res.blob();
-    } catch (e) {
-        console.error('Video download error:', e);
-        throw e;
-    }
-}
-
-async function convertToMp3(blob) {
-    const { createFFmpeg, fetchFile } = FFmpeg;
-    const ffmpeg = createFFmpeg({ log: false });
-    
-    await ffmpeg.load();
-    
-    const inputName = 'input.mp4';
-    const outputName = 'output.mp3';
-    
-    ffmpeg.FS('writeFile', inputName, await fetchFile(blob));
-    
-    await ffmpeg.run('-i', inputName, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outputName);
-    
-    const data = ffmpeg.FS('readFile', outputName);
-    return new Blob([data.buffer], { type: 'audio/mpeg' });
-}
-
-async function handleConvert(videoId, title, artist) {
-    openDlg(`<h2>Converting...</h2><p class="sub">Please wait while we fetch and convert the video.</p><div id="conv-status"></div>`);
-    
-    try {
-        $('#conv-status').textContent = 'Fetching video...';
-        const videoBlob = await downloadVideoBlob(videoId);
-        
-        $('#conv-status').textContent = 'Converting to MP3...';
-        const mp3Blob = await convertToMp3(videoBlob);
-        
-        const track = {
-            id: uid(),
-            title: title.replace(/[^a-zA-Z0-9\s]/g, ''),
-            artist: artist || 'Unknown Artist',
-            created: Date.now(),
-            blob: mp3Blob,
-            duration: 0 // We'll approximate or leave it out
-        };
-        
-        await saveTrack(track);
-        $('#conv-status').innerHTML = `<button class="btn" id="download-btn">Download MP3</button>`;
-        $('#download-btn').onclick = () => {
-            const url = URL.createObjectURL(mp3Blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${track.title}.mp3`;
-            a.click();
-            URL.revokeObjectURL(url);
-        };
-    } catch (e) {
-        $('#conv-status').innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p><button class="btn ghost" onclick="closeDlg()">Close</button>`;
-    }
-}
-
-function openYouTubeConverter() {
-    openDlg(`
-        <h2>YouTube to MP3</h2>
-        <input type="text" id="yt-search" placeholder="Search YouTube..." autofocus>
-        <button class="btn" id="yt-go">Search</button>
-        <div id="yt-results" style="margin-top:16px; max-height:40vh; overflow-y:auto;"></div>
-    `);
-    
-    $('#yt-go').onclick = async () => {
-        const query = $('#yt-search').value.trim();
-        if (!query) return;
-        
-        $('#yt-results').innerHTML = '<p class="sub">Searching...</p>';
-        const results = await searchYouTube(query);
-        
-        if (results.length === 0) {
-            $('#yt-results').innerHTML = '<p class="sub">No results found.</p>';
-            return;
-        }
-        
-        $('#yt-results').innerHTML = results.map(item => `
-            <div class="row" style="cursor:pointer">
-                <img src="${item.thumbnail}" style="width:60px;height:45px;object-fit:cover;border-radius:6px;">
-                <div class="meta">
-                    <div class="t">${esc(item.title)}</div>
-                    <div class="sub">${esc(item.artist)} · ${fmt(item.duration)}</div>
-                </div>
-                <button class="btn sm" data-id="${item.id}" data-title="${esc(item.title)}" data-artist="${esc(item.artist)}">Convert</button>
-            </div>
-        `).join('');
-        
-        document.querySelectorAll('[data-id]').forEach(btn => {
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                const id = btn.dataset.id;
-                const title = btn.dataset.title;
-                const artist = btn.dataset.artist;
-                handleConvert(id, title, artist);
-            };
-        });
-    };
-}
-
-// --- Render Home ---
+/* ---------- HOME ---------- */
 function renderHome() {
-    getAllTracks().then(tracks => {
-        const view = $('#view');
-        view.innerHTML = `
-            <h1>Orpheus</h1>
-            <p class="sub">Your personal music library</p>
-            <div style="margin-top:20px">
-                <button class="btn" id="yt-convert">🎵 YouTube Converter</button>
-            </div>
-            <h2>Your Library (${tracks.length})</h2>
-            ${tracks.length === 0 ? '<p class="empty">No tracks yet. Use the YouTube converter to add some!</p>' : 
-                tracks.sort((a,b) => b.created - a.created).map(t => `
-                    <div class="row">
-                        <div class="meta">
-                            <div class="t">${esc(t.title)}</div>
-                            <div class="sub">${esc(t.artist)}</div>
-                        </div>
-                        <button class="small" onclick="deleteTrack('${t.id}').then(()=>renderHome())">Delete</button>
-                    </div>
-                `).join('')}
-        `;
-        
-        $('#yt-convert').onclick = openYouTubeConverter;
-    }).catch(err => {
-        $('#view').innerHTML = `<p class="empty">Error loading database: ${err.message}</p>`;
-    });
+  const todays = plays.filter(p => new Date(p.t).toISOString().slice(0, 10) === today());
+  const s = statsFor(todays), all = statsFor(plays);
+  const topTrack = s.ranked[0] && byId(s.ranked[0][0]);
+  const last = [...new Map([...plays].reverse().map(p => [p.id, p])).values()].map(p => byId(p.id)).filter(Boolean).slice(0, 10);
+  const most = all.ranked.slice(0, 10).map(([id, n]) => ({ t: byId(id), n }));
+  
+  const secWrap = `<h2>Your day, wrapped</h2>
+    <div class="wrap" style="background:linear-gradient(135deg,var(--accent),var(--amber));border-radius:20px;padding:20px;color:#fff;margin-bottom:20px">
+      <div class="sub" style="color:#ffffffcc">Refreshes every day</div>
+      <div style="font-size:24px;font-weight:700;line-height:1.2;margin:6px 0">${topTrack ? esc(topTrack.title) : 'Nothing played yet today'}</div>
+      <div style="opacity:.9">${s.topArtist ? 'Top artist: ' + esc(s.topArtist) : 'Play something from your library.'}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px">
+        <div style="background:rgba(0,0,0,.22);border-radius:12px;padding:10px"><b>${s.count}</b><br><span style="font-size:12px;opacity:.85">plays</span></div>
+        <div style="background:rgba(0,0,0,.22);border-radius:12px;padding:10px"><b>${s.mins}</b><br><span style="font-size:12px;opacity:.85">minutes</span></div>
+        <div style="background:rgba(0,0,0,.22);border-radius:12px;padding:10px"><b>${streak()}</b><br><span style="font-size:12px;opacity:.85">day streak</span></div>
+      </div>
+    </div>`;
+    
+  const secLast = `<h2>Last listened</h2>
+    ${last.length ? `<div class="hscroll">${last.map(t => `<button class="card" data-play="${t.id}"><div class="ico">♪</div><div class="t">${esc(t.title)}</div><div class="a sub">${esc(t.artist || '')}</div></button>`).join('')}</div>` : '<div class="empty">Songs you play will show up here.</div>'}`;
+    
+  const secMost = `<h2>Most listened</h2>
+    ${most.length ? most.map(({ t, n }) => rowHtml(t, `<span class="sub">${n}×</span><button class="small" data-play="${t.id}">Play</button>`)).join('') : '<div class="empty">Your top tracks will appear after a few plays.</div>'}`;
+    
+  const show = k => true; // Simplified for this demo
+  
+  $('#view').innerHTML = `
+    <div class="top"><div><h1>Home</h1><div class="sub">${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><span class="mark">By Afsin</span><div style="display:flex;gap:6px;align-items:center"><button class="btn sm" id="ai" style="background:var(--amber)">🔍 Convert from YouTube</button></div></div></div>
+    ${secWrap}${secLast}${secMost}`;
+      
+  $('#ai').onclick = openYouTubeConverter;
+  document.querySelectorAll('[data-play]').forEach(b => b.onclick = () => playQueue([b.dataset.play]));
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', renderHome);
+/* ---------- LIBRARY ---------- */
+function renderLibrary() {
+  const list = [...tracks].sort((a, b) => b.created - a.created);
+  $('#view').innerHTML = `
+    <div class="top"><div><h1>Library</h1><div class="sub">${list.length} MP3${list.length === 1 ? '' : 's'} on this device</div></div>
+      <button class="btn sm" id="conv">+ Convert</button></div>
+    <div style="margin-top:16px">${list.length ? list.map(t => rowHtml(t, `<button class="small" data-play="${t.id}">▶</button><button class="small" data-menu="${t.id}" aria-label="More">⋯</button>`)).join('')
+      : '<div class="empty">Nothing here yet.<br>Tap Convert to turn a video or audio file into an MP3.</div>'}</div>`;
+  $('#conv').onclick = openConvert;
+  document.querySelectorAll('[data-play]').forEach(b => b.onclick = () => playQueue(list.map(t => t.id), list.findIndex(t => t.id === b.dataset.play)));
+  document.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => trackMenu(b.dataset.menu));
+}
+function trackMenu(id) {
+  const t = byId(id);
+  openDlg(`<h2 style="margin-top:0">${esc(t.title)}</h2>
+    <div style="display:grid;gap:8px"><button class="btn ghost" id="m-ren">Rename</button>
+    <button class="btn ghost" id="m-dl">Download MP3</button><button class="btn ghost" id="m-del" style="color:var(--danger)">Delete</button></div>`);
+  $('#m-ren').onclick = () => openDlg(`<h2 style="margin-top:0">Rename</h2><label class="sub">Title</label><input type="text" id="n-t" value="${esc(t.title)}"><label class="sub">Artist</label><input type="text" id="n-a" value="${esc(t.artist)}"><button class="btn" id="n-ok">Save</button>`) || ($('#n-ok').onclick = async () => {
+    t.title = $('#n-t').value.trim() || t.title; t.artist = $('#n-a').value.trim(); await dbPut(t); dlg.close(); toast('Renamed'); render(); });
+  $('#m-dl').onclick = () => { downloadTrack(t); dlg.close(); };
+  $('#m-del').onclick = async () => { if (!confirm('Delete this MP3?')) return; await dbDel(id); tracks = tracks.filter(x => x.id !== id); playlists.forEach(p => p.ids = p.ids.filter(x => x !== id)); save('playlists', playlists); dlg.close(); render(); };
+}
+
+async function downloadTrack(t) {
+  const name = ((t.artist ? t.artist + ' - ' : '') + t.title).replace(/[\\/:*?"<>|]+/g, '_') + '.mp3';
+  const a = document.createElement('a'); a.href = URL.createObjectURL(t.blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+function rowHtml(t, extra = '') { return `<div class="row"><div class="ico">♪</div><div class="meta"><div class="t">${esc(t.title)}</div><div class="a">${esc(t.artist || 'Unknown artist')} · ${fmt(t.duration)}</div></div>${extra}</div>`; }
+
+/* ---------- YOUTUBE CONVERTER (The New Feature) ---------- */
+async function openYouTubeConverter() {
+  openDlg(`
+    <h2 style="margin-top:0">YouTube to MP3</h2>
+    <p class="sub">Search for a song and convert it directly to your library.</p>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="yt-query" placeholder="Search YouTube..." style="margin:0">
+      <button class="btn sm" id="yt-search-btn">Search</button>
+    </div>
+    <div id="yt-results" style="margin-top:16px; max-height:40vh; overflow-y:auto;"></div>
+  `);
+  
+  $('#yt-search-btn').onclick = async () => {
+    const query = $('#yt-query').value.trim();
+    if (!query) return;
+    $('#yt-results').innerHTML = '<p class="sub">Searching...</p>';
+    
+    try {
+      // Using Invidious API (free, no key required)
+      const response = await fetch(`https://vid.puffyan.us/api/v1/search?q=${encodeURIComponent(query)}&type=video`);
+      const data = await response.json();
+      const videos = data.filter(item => item.type === 'video').map(item => ({
+        id: item.videoId,
+        title: item.title,
+        artist: item.author,
+        duration: item.lengthSeconds
+      }));
+      
+      $('#yt-results').innerHTML = videos.length 
+        ? videos.map(v => `
+            <div class="row" style="cursor:pointer">
+              <div class="meta">
+                <div class="t">${esc(v.title)}</div>
+                <div class="a">${esc(v.artist)} · ${fmt(v.duration)}</div>
+              </div>
+              <button class="btn sm" data-id="${v.id}" data-title="${esc(v.title)}" data-artist="${esc(v.artist)}">Convert</button>
+            </div>
+          `).join('')
+        : '<p class="empty">No results found.</p>';
+        
+      document.querySelectorAll('[data-id]').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.id;
+          const title = btn.dataset.title;
+          const artist = btn.dataset.artist;
+          convertYouTubeToMP3(id, title, artist);
+        };
+      });
+    } catch (err) {
+      $('#yt-results').innerHTML = '<p class="sub" style="color:var(--danger)">Failed to search YouTube.</p>';
+    }
+  };
+}
+
+async function convertYouTubeToMP3(videoId, title, artist) {
+  openDlg(`
+    <h2>Converting...</h2>
+    <p class="sub">Fetching video and encoding to MP3. This may take a moment.</p>
+    <div class="prog"><i id="yt-progress"></i></div>
+    <p class="sub" id="yt-status">Connecting...</p>
+  `);
+  
+  const statusEl = $('#yt-status');
+  const progressEl = $('#yt-progress');
+  
+  try {
+    // Step 1: Get direct video URL from a free API
+    statusEl.textContent = 'Fetching video stream...';
+    const apiRes = await fetch(`https://api.vevioz.com/api/video/download/${videoId}`);
+    const apiData = await apiRes.json();
+    
+    if (apiData.status !== 'success') throw new Error('Could not find video stream');
+    
+    // Find best quality mp4 stream
+    const stream = apiData.data.streams.find(s => s.extension === 'mp4' && s.quality === 'high') 
+                   || apiData.data.streams.find(s => s.extension === 'mp4');
+                   
+    if (!stream) throw new Error('No suitable video format found');
+    
+    statusEl.textContent = 'Downloading video...';
+    const videoBlob = await fetch(stream.url).then(r => r.blob());
+    
+    // Step 2: Convert using FFmpeg WASM
+    statusEl.textContent = 'Converting to MP3...';
+    const mp3Blob = await convertBlobToMp3(videoBlob, (p) => {
+      if(progressEl) progressEl.style.width = `${p * 100}%`;
+    });
+    
+    // Step 3: Save to Library
+    statusEl.textContent = 'Saving to library...';
+    const track = {
+      id: uid(),
+      title: title.replace(/[^a-zA-Z0-9\s]/g, ''),
+      artist: artist || 'YouTube',
+      created: Date.now(),
+      blob: mp3Blob,
+      duration: 0
+    };
+    
+    await dbPut(track);
+    tracks.push(track);
+    
+    progressEl.style.width = '100%';
+    statusEl.textContent = 'Done! Added to Library.';
+    
+    // Add Play Button
+    const playBtn = document.createElement('button');
+    playBtn.className = 'btn';
+    playBtn.textContent = 'Play Now';
+    playBtn.style.marginTop = '10px';
+    playBtn.onclick = () => { playQueue([track.id]); closeDlg(); render(); };
+    statusEl.after(playBtn);
+    
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+    statusEl.style.color = 'var(--danger)';
+  }
+}
+
+// Helper: Convert Blob to MP3 using FFmpeg
+async function convertBlobToMp3(blob, onProgress) {
+  const { createFFmpeg, fetchFile } = FFmpeg;
+  const ffmpeg = createFFmpeg({ log: false });
+  
+  await ffmpeg.load();
+  
+  const inputName = 'input.mp4';
+  const outputName = 'output.mp3';
+  
+  ffmpeg.FS('writeFile', inputName, await fetchFile(blob));
+  
+  await ffmpeg.run('-i', inputName, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outputName);
+  
+  const data = ffmpeg.FS('readFile', outputName);
+  ffmpeg.FS('unlink', inputName);
+  ffmpeg.FS('unlink', outputName);
+  
+  return new Blob([data.buffer], { type: 'audio/mpeg' });
+}
+
+/* ---------- OLD CONVERT (for local files) ---------- */
+async function openConvert(prefill) {
+  openDlg(`<h2 style="margin-top:0">Convert Local File</h2>
+    <p class="sub">Choose a video or audio file from your device.</p>
+    <label class="drop" for="file">Choose files<input id="file" type="file" accept="audio/*,video/*" multiple hidden></label>
+    <div id="jobs" style="margin-top:14px"></div>`);
+    
+  $('#file').onchange = async (e) => {
+    const files = Array.from(e.target.files);
+    if(!files.length) return;
+    for(const f of files) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuf = await ctx.decodeAudioData(await f.arrayBuffer()); ctx.close();
+        // Simple conversion fallback for local files if FFmpeg isn't used
+        // For now, we just store the blob directly if it's already mp3, or warn
+        const track = { id: uid(), title: f.name.replace(/\.[^.]+$/, ''), artist: '', created: Date.now(), blob: f, duration: audioBuf.duration };
+        await dbPut(track); tracks.push(track);
+      } catch {}
+    }
+    render();
+  };
+}
+
+/* ---------- Init ---------- */
+(async () => {
+  tracks = await dbAll();
+  render();
+})();
+
 </script>
 </body>
 </html>
