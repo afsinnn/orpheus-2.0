@@ -202,9 +202,10 @@ function renderHome() {
   const show = k => !theme.hide.includes(k);
   $('#view').innerHTML = `
     <div class="top"><div><h1>Home</h1><div class="sub">${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div></div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><span class="mark">By Afsin</span><div style="display:flex;gap:6px;align-items:center"><button class="small" id="cust" aria-label="Customize">🎨</button><button class="btn sm" id="ai">🔎 Find free music</button></div></div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><span class="mark">By Afsin</span><div style="display:flex;gap:6px;align-items:center"><button class="small" id="cust" aria-label="Customize">🎨</button><button class="btn sm" id="conv-home">+ Convert</button></div></div></div>
     ${show('wrap') ? secWrap : ''}${show('last') ? secLast : ''}${show('most') ? secMost : ''}`;
-  $('#ai').onclick = openSearch; $('#cust').onclick = openCustomize;
+  $('#cust').onclick = openCustomize;
+  $('#conv-home').onclick = openConvert;
   document.querySelectorAll('[data-play]').forEach(b => b.onclick = () => playQueue([b.dataset.play]));
 }
 
@@ -335,14 +336,34 @@ async function readPhoto(file, out, onPick) {
     const img = await toDataUrl(file, 1800, .92);
     const worker = await Tesseract.createWorker('eng', 1, { logger: m => { if (m.status === 'recognizing text') out.innerHTML = `<p class="sub">Reading the photo… ${Math.round(m.progress * 100)}%</p>`; } });
     const { data } = await worker.recognize(img); await worker.terminate();
-    const lines = [...new Set(data.text.split('\n').map(cleanLine).filter(l => (l.match(/\p{L}/gu) || []).length >= 3))].slice(0, 40);
-    if (!lines.length) { out.innerHTML = '<p class="sub">I couldn’t read any text. Try a clearer, closer photo.</p>'; return; }
-    out.innerHTML = '<p class="sub">Tap a line to search for it, or click "Search All" to convert the whole list:</p>' + 
-      lines.map((l, k) => `<button class="row" style="width:100%;text-align:left" data-l="${k}"><div class="meta t">${esc(l)}</div><span class="small">Search</span></button>`).join('') +
-      `<button class="btn" id="scan-search-all" style="margin-top:12px">📷 Search All (${lines.length} songs)</button>`;
     
-    document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => onPick(lines[+b.dataset.l]));
-    $('#scan-search-all').onclick = () => onPick(lines.join('\n'));
+    // Clean lines
+    let lines = data.text.split('\n').map(cleanLine).filter(l => (l.match(/\p{L}/gu) || []).length >= 3);
+    
+    // Second pass: try to pair Artist - Title if they are on separate lines
+    const pairedLines = [];
+    for(let i=0; i<lines.length; i++) {
+        const line = lines[i];
+        if(line.includes('-') && i+1 < lines.length && !lines[i+1].includes('-')) {
+            // Likely "Artist - Song" format already
+            pairedLines.push(line);
+        } else if(i+1 < lines.length && lines[i+1].includes('-')) {
+            // Likely "Song\n- Artist" format
+            pairedLines.push(lines[i+1] + ' - ' + line);
+            i++; // Skip next line as it's used
+        } else {
+            pairedLines.push(line);
+        }
+    }
+    
+    if (!pairedLines.length) { out.innerHTML = '<p class="sub">I couldn’t read any text. Try a clearer, closer photo.</p>'; return; }
+    
+    out.innerHTML = '<p class="sub">Tap a line to search for it, or click "Search All" to convert the whole list:</p>' + 
+      pairedLines.map((l, k) => `<button class="row" style="width:100%;text-align:left" data-l="${k}"><div class="meta t">${esc(l)}</div><span class="small">Search</span></button>`).join('') +
+      `<button class="btn" id="scan-search-all" style="margin-top:12px">📷 Search All (${pairedLines.length} songs)</button>`;
+    
+    document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => onPick(pairedLines[+b.dataset.l]));
+    $('#scan-search-all').onclick = () => onPick(pairedLines.join('\n'));
   } catch { out.innerHTML = '<p class="sub" style="color:var(--danger)">Couldn’t read that photo. The text reader needs an internet connection the first time.</p>'; }
 }
 
@@ -442,7 +463,7 @@ function openConvert(prefill) {
         }
 
         openDlg(`<h2>Search Results</h2>
-          <p class="sub">Found ${ytResults.length} YouTube and ${spResults.length} Spotify matches. Click to convert.</p>
+          <p class="sub">Found ${ytResults.length} YouTube and ${spResults.length} Spotify matches. Select songs to convert:</p>
           <div id="search-results"></div>
           <button class="btn" id="convert-selected">Convert Selected</button>`);
           
@@ -705,34 +726,6 @@ async function playtubeSearch(query) {
     return null;
   }));
   return out.filter(Boolean);
-}
-
-/* ---------- SEARCH (AI) ---------- */
-async function openSearch() {
-  const q = prompt('Search for free music'); if (!q) return;
-  const cid = ls('jamendo_cid', '');
-  const [ia, jm, pt] = await Promise.all([archiveSearch(q), cid ? jamendoSearch(q, cid) : [], playtubeSearch(q)]);
-  const all = [...ia, ...jm, ...pt];
-  openDlg(`<h2 style="margin-top:0">Free music: “${esc(q)}”</h2>
-    <div class="links" style="margin:0 0 12px">
-      ${cid ? `<button class="small" id="sc-jam">Jamendo</button>` : `<button class="small" id="sc-jam">Enable Jamendo</button>`}
-      <button class="small" id="sc-ia">Internet Archive</button>
-      <button class="small" id="sc-pt">Playtube</button>
-    </div>
-    <div id="srch-res"></div>`);
-  const show = (src, filter) => {
-    const hits = filter ? all.filter(x => x.src === src) : all;
-    $('#srch-res').innerHTML = hits.length ? hits.map(s => `<div class="row" style="width:100%;text-align:left"><div class="ico">♪</div><div class="meta"><div class="t">${esc(s.name)}</div><div class="a">${esc(s.artist)} · ${esc(s.src)}</div></div><button class="small" data-url="${s.url}">Open</button></div>`).join('') : '<div class="empty">No results for this source.</div>';
-  };
-  $('#sc-ia').onclick = () => show('Internet Archive');
-  $('#sc-pt').onclick = () => show('Playtube');
-  if (cid) $('#sc-jam').onclick = () => show('Jamendo');
-  else $('#sc-jam').onclick = () => { const c = prompt('Jamendo Client ID (free):'); if (!c) return; save('jamendo_cid', c); openSearch(); };
-  document.querySelectorAll('[data-url]').forEach(b => b.onclick = () => {
-    const url = b.dataset.url, name = b.previousElementSibling.querySelector('.t').textContent;
-    openDlg(`<h2 style="margin-top:0">${esc(name)}</h2><div class="links"><a href="${esc(url)}" target="_blank" rel="noopener">Open original link</a></div><button class="btn ghost" onclick="dlg.close()">Close</button>`);
-  });
-  show(null, null);
 }
 
 /* ---------- INIT ---------- */
