@@ -349,10 +349,9 @@ async function readPhoto(file, out, onPick) {
 /* ---------- CONVERT DIALOG ---------- */
 function openConvert(prefill) {
   let pendingFiles = [];
-  let pendingLinks = [];
   
   openDlg(`<h2 style="margin-top:0">Convert to MP3</h2>
-    <p class="sub">Choose files, paste links, or use 📷 to scan a list of songs from a photo.</p>
+    <p class="sub">Choose files, use 📷 to scan a list, or paste links.</p>
     
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button class="btn ghost sm" id="opt-files">📁 Choose Files</button>
@@ -381,7 +380,7 @@ function openConvert(prefill) {
 
   const updateList = () => {
     const container = $('#picked-list');
-    const allItems = [...pendingFiles.map(f => ({type:'file', name:f.name})), ...pendingLinks.map(l => ({type:'link', name:l}))];
+    const allItems = [...pendingFiles.map(f => ({type:'file', name:f.name}))];
     if(allItems.length === 0) {
         container.innerHTML = '<div class="empty">No items added yet.</div>';
         $('#go').disabled = true;
@@ -679,35 +678,6 @@ async function jamendoSearch(query, cid) {
   const d = await jget('https://api.jamendo.com/v3.0/tracks/?client_id=' + encodeURIComponent(cid) + '&format=json&limit=8&audiodownload_allowed=true&search=' + encodeURIComponent(query));
   return (d.results || []).filter(r => r.audiodownload).map(r => ({ src: 'Jamendo', license: r.license_ccurl || 'Creative Commons', url: r.audiodownload, name: r.name, artist: r.artist_name }));
 }
-/* ---------- PLAYTUBE: your own website (edit the two lines in the box) ---------- */
-const PLAYTUBE = {
-  searchUrl: 'https://playtube.example.com/search?q={q}',   // 1) CHANGE: your site's search address. {q} becomes what you typed
-  resultSelector: 'a.result'                                // 2) CHANGE: CSS selector of the result links on that page (ignored if your site returns JSON)
-};
-async function playtubeSearch(query) {
-  const url = PLAYTUBE.searchUrl.replace('{q}', encodeURIComponent(query));
-  const res = await fetch(url); if (!res.ok) throw new Error(res.status);
-  const text = await res.text(), mk = (u, name, artist) => ({ src: 'Playtube', license: 'My own site', url: u, name: name || 'Untitled', artist: artist || '' });
-  if (/^\s*[\[{]/.test(text)) {                              // site answers with JSON
-    let d = JSON.parse(text); d = Array.isArray(d) ? d : (d.results || d.items || []);
-    return d.slice(0, 10).map(x => mk(x.url || x.audio || x.video, x.title || x.name, x.artist)).filter(c => c.url);
-  }
-  const doc = new DOMParser().parseFromString(text, 'text/html');   // site answers with a normal web page
-  const links = [...doc.querySelectorAll(PLAYTUBE.resultSelector)].slice(0, 8);
-  const out = await Promise.all(links.map(async a => {
-    const href = a.getAttribute('href') || a.getAttribute('src') || a.dataset.url;
-    const name = a.getAttribute('data-name') || a.getAttribute('title') || a.textContent.trim();
-    const artist = a.getAttribute('data-artist') || '';
-    if (!href) return null;
-    try {
-      const r = await fetch(href, { method: 'HEAD' });
-      if (r.ok && /^audio\/|video\//.test(r.headers.get('content-type') || '')) return mk(href, name, artist);
-    } catch {}
-    return null;
-  }));
-  return out.filter(Boolean);
-}
-
 /* ---------- PLAYTUBE: your own website (edit the two lines in the box) ---------- */
 const PLAYTUBE = {
   searchUrl: 'https://playtube.example.com/search?q={q}',   // 1) CHANGE: your site's search address. {q} becomes what you typed
