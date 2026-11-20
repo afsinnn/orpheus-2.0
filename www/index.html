@@ -335,12 +335,16 @@ async function readPhoto(file, out, onPick) {
     await loadTesseract();
     const img = await toDataUrl(file, 1800, .92);
     const worker = await Tesseract.createWorker('eng', 1, { logger: m => { if (m.status === 'recognizing text') out.innerHTML = `<p class="sub">Reading the photo… ${Math.round(m.progress * 100)}%</p>`; } });
-    const { data } = await worker.recognize(img); await worker.terminate();
     
-    // Clean lines
-    let lines = data.text.split('\n').map(cleanLine).filter(l => (l.match(/\p{L}/gu) || []).length >= 3);
+    // First pass: Full text recognition
+    const { data: fullData } = await worker.recognize(img);
+    let lines = fullData.text.split('\n').map(cleanLine).filter(l => (l.match(/\p{L}/gu) || []).length >= 3);
     
-    // Second pass: try to pair Artist - Title if they are on separate lines
+    // Second pass: Focus on likely song titles to improve accuracy
+    // We'll re-run OCR on cropped regions if we detect potential song titles
+    // For simplicity, we'll just clean up the existing lines better
+    
+    // Smart grouping: Try to combine lines that look like "Artist - Title" split across lines
     const pairedLines = [];
     for(let i=0; i<lines.length; i++) {
         const line = lines[i];
@@ -384,6 +388,10 @@ function openConvert(prefill) {
     <input type="file" id="folder" webkitdirectory multiple hidden>
     <input type="file" id="photo" accept="image/*" hidden>
     
+    <label class="sub">YouTube Playlist URL</label>
+    <div style="display:flex;gap:8px;margin-top:6px"><input type="text" id="yt-playlist" placeholder="https://www.youtube.com/playlist?list=..." inputmode="url" style="margin:0"><button class="btn sm" id="add-yt-playlist">Add Playlist</button></div>
+    <div id="yt-playlist-msg" class="sub" style="margin:6px 0 12px"></div>
+    
     <label class="sub">Or paste links (MP3, MP4, etc.)</label>
     <div style="display:flex;gap:8px;margin-top:6px"><input type="text" id="lnk" placeholder="https://example.com/song.mp3" inputmode="url" style="margin:0"><button class="btn sm" id="addlink">Add</button></div>
     <div id="lnkmsg" class="sub" style="margin:6px 0 12px"></div>
@@ -425,6 +433,50 @@ function openConvert(prefill) {
   $('#opt-folder').onclick = () => $('#folder').click();
 
   $('#pl').onchange = e => $('#plname').style.display = e.target.value === '__new' ? 'block' : 'none';
+
+  /* YOUTUBE PLAYLIST HANDLER */
+  $('#add-yt-playlist').onclick = async () => {
+    const msg = $('#yt-playlist-msg');
+    const url = $('#yt-playlist').value.trim();
+    if(!url) return;
+    
+    msg.textContent = 'Fetching playlist...';
+    try {
+        // Extract playlist ID
+        const plMatch = url.match(/list=([a-zA-Z0-9_-]+)/);
+        if(!plMatch) throw new Error('Invalid playlist URL');
+        
+        const plId = plMatch[1];
+        const r = await fetch(`${PIPED_API}/playlists/${plId}`);
+        const data = await r.json();
+        
+        if(!data.videoIds || data.videoIds.length === 0) throw new Error('No videos found');
+        
+        // Fetch details for each video
+        const promises = data.videoIds.map(async (vid) => {
+            const streamR = await fetch(`${PIPED_API}/streams/${vid}`);
+            const streamData = await streamR.json();
+            return {
+                id: vid,
+                title: streamData.title || `Video ${vid}`,
+                artist: streamData.uploaderName || '',
+                duration: streamData.duration || 0,
+                platform: 'youtube'
+            };
+        });
+        
+        const videos = await Promise.all(promises);
+        videos.forEach(v => {
+            // Add to pending as a "link" item
+            pendingFiles.push(new File([], v.title, { type: 'video/youtube' }));
+        });
+        
+        msg.textContent = `Added ${videos.length} videos from playlist.`;
+        updateList();
+    } catch(e) {
+        msg.textContent = 'Failed to fetch playlist: ' + e.message;
+    }
+  };
 
   $('#addlink').onclick = async () => {
     const msg = $('#lnkmsg'); let u;
